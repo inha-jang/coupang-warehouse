@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쿠팡 물류 네트워크 지도</title>
+<meta name="description" content="쿠팡 풀필먼트 센터·서브FC·서브허브·캠프·기타 시설 288곳의 위치와 목록">
+<meta property="og:type" content="website">
+<meta property="og:title" content="쿠팡 물류 네트워크 지도">
+<meta property="og:description" content="전국 쿠팡 물류시설 288곳의 위치와 목록. 유형별 지도와 표로 볼 수 있습니다.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2314181f'/%3E%3Crect x='7' y='7' width='18' height='18' fill='%23c8102e'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css">
+<style>
+  :root{
+    --ink:#14181f;
+    --ink-70:#4a5361;
+    --ink-40:#8b95a3;
+    --rule:#d7dde4;
+    --panel:#eef1f4;
+    --paper:#ffffff;
+    --fc:#c8102e;
+    --hub:#e07a00;
+    --camp:#0f8b8d;
+    --etc:#5b6b7c;
+    --sans:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-size:15px;line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+
+  /* ---------- masthead ---------- */
+  .masthead{background:var(--ink);color:#fff;padding:38px 0 0}
+  .masthead h1{
+    font-size:clamp(30px,5.2vw,52px);font-weight:800;letter-spacing:-.035em;
+    margin:0 0 10px;line-height:1.08;
+  }
+  .kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+    color:#8e99a8;margin:0 0 14px;
+  }
+  .masthead p.lede{margin:0 0 26px;color:#c2cad4;max-width:62ch;font-size:15.5px}
+
+  /* signature: network spine */
+  .spine{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid #2a313c;padding-top:0}
+  .node{
+    flex:1 1 150px;min-width:132px;padding:16px 18px 18px 0;position:relative;
+  }
+  .node + .node{padding-left:18px;border-left:1px solid #2a313c}
+  .node .tick{display:block;width:26px;height:4px;margin-bottom:11px}
+  .node .n{font-family:var(--mono);font-size:27px;font-weight:600;line-height:1;display:block}
+  .node .lbl{font-size:13px;color:#c2cad4;display:block;margin-top:5px}
+  .node .role{font-size:11.5px;color:#78838f;display:block;margin-top:3px;line-height:1.45}
+  .flowline{
+    font-family:var(--mono);font-size:11px;color:#78838f;letter-spacing:.06em;
+    padding:12px 0 20px;border-top:1px solid #2a313c;margin-top:0;
+  }
+  .flowline b{color:#c2cad4;font-weight:400}
+
+  /* ---------- tabs + filters ---------- */
+  .toolbar{border-bottom:1px solid var(--rule);background:var(--paper);position:sticky;top:0;z-index:600}
+  .tabs{display:flex;gap:2px}
+  .tab{
+    appearance:none;border:0;background:none;cursor:pointer;
+    font-family:var(--sans);font-size:14px;font-weight:600;color:var(--ink-40);
+    padding:15px 2px;margin-right:26px;border-bottom:3px solid transparent;
+  }
+  .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--fc)}
+  .tab:focus-visible{outline:2px solid var(--fc);outline-offset:3px}
+
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:0 0 15px}
+  .filters label{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-40);display:block;margin-bottom:5px;
+  }
+  select,input[type=search]{
+    font-family:var(--sans);font-size:14px;color:var(--ink);
+    background:var(--paper);border:1px solid var(--rule);border-radius:2px;
+    padding:8px 10px;min-width:150px;
+  }
+  input[type=search]{min-width:230px}
+  select:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .chip{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
+    border:1px solid var(--rule);border-radius:2px;padding:8px 11px;font-size:13.5px;
+    background:var(--paper);
+  }
+  .chip input{position:absolute;opacity:0;width:0;height:0}
+  .chip .sw{width:11px;height:11px;flex:none;border-radius:1px}
+  .chip[data-on="0"]{color:var(--ink-40);background:var(--panel)}
+  .chip[data-on="0"] .sw{opacity:.28}
+  .chip:focus-within{outline:2px solid var(--ink);outline-offset:1px}
+  .count{font-family:var(--mono);font-size:12.5px;color:var(--ink-70);margin-left:auto;white-space:nowrap}
+
+  /* ---------- panels ---------- */
+  .panel[hidden]{display:none}
+  #map{height:min(70vh,660px);min-height:420px;border:1px solid var(--rule);border-radius:2px;margin-bottom:14px}
+  .maphint{font-size:12.5px;color:var(--ink-40);margin:0 0 34px}
+  .banner{
+    border-left:3px solid var(--fc);background:#fdf3f4;padding:13px 16px;margin:16px 0 14px;
+    font-size:13.5px;line-height:1.6;color:var(--ink-70);border-radius:0 2px 2px 0;
+  }
+  .banner b{color:var(--ink)}
+  .prec{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;white-space:nowrap;
+    border:1px solid var(--rule);border-radius:2px;padding:2px 5px;color:var(--ink-70)}
+  .prec[data-p="읍면동"]{border-color:#b9c6b3;background:#f2f7f0}
+  .prec[data-p="시군구"]{border-color:#e4cfa0;background:#fdf8ec}
+  .prec[data-p="주소없음"]{border-color:#e3b5b8;background:#fdf3f4}
+  .mk.approx svg{opacity:.72}
+
+  /* markers */
+  .mk{display:block}
+  .mk svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}
+  .leaflet-popup-content-wrapper{border-radius:2px}
+  .leaflet-popup-content{margin:14px 16px;font-family:var(--sans);line-height:1.6}
+  .pop-type{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
+  .pop-name{font-size:16.5px;font-weight:700;margin:3px 0 8px;letter-spacing:-.01em}
+  .pop-row{font-size:13px;color:var(--ink-70);margin:2px 0}
+  .pop-row b{color:var(--ink);font-weight:600}
+  .pop-links{margin-top:9px;font-size:12.5px;display:flex;gap:12px}
+  .pop-links a{color:var(--fc)}
+
+  /* ---------- table ---------- */
+  .tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:2px;margin-bottom:14px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:820px}
+  thead th{
+    position:sticky;top:0;background:var(--panel);text-align:left;white-space:nowrap;
+    font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-70);font-weight:600;padding:11px 12px;border-bottom:1px solid var(--rule);
+    cursor:pointer;
+  }
+  thead th[aria-sort="ascending"]::after{content:" ▲";font-size:8px}
+  thead th[aria-sort="descending"]::after{content:" ▼";font-size:8px}
+  tbody td{padding:11px 12px;border-bottom:1px solid #edf0f3;vertical-align:top}
+  tbody tr:hover{background:#f7f9fb}
+  td.nm{font-weight:600;letter-spacing:-.01em}
+  .tag{
+    display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+    font-size:12px;font-weight:600;
+  }
+  .tag .sw{width:9px;height:9px;border-radius:1px;flex:none}
+  .addr{color:var(--ink-70)}
+  .pin{
+    appearance:none;background:none;border:0;cursor:pointer;padding:0;
+    font-family:var(--mono);font-size:11px;color:var(--fc);text-decoration:underline;
+  }
+  .empty{padding:44px 16px;text-align:center;color:var(--ink-40);font-size:14px}
+  .tableacts{display:flex;gap:10px;margin-bottom:34px}
+  .btn{
+    font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;
+    border:1px solid var(--ink);background:var(--paper);color:var(--ink);
+    padding:8px 14px;border-radius:2px;
+  }
+  .btn:hover{background:var(--ink);color:#fff}
+
+  /* ---------- notes ---------- */
+  .notes{border-top:1px solid var(--rule);padding:30px 0 60px}
+  .notes h2{font-size:16px;font-weight:700;letter-spacing:-.01em;margin:0 0 12px}
+  .notes h2 + p, .notes p{margin:0 0 14px;color:var(--ink-70);font-size:14px;max-width:74ch}
+  .deflist{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:20px;margin:0 0 28px}
+  .deflist div{border-top:3px solid var(--ink);padding-top:11px}
+  .deflist dt{font-weight:700;font-size:14px;margin-bottom:5px}
+  .deflist dd{margin:0;font-size:13px;color:var(--ink-70);line-height:1.6}
+  footer{background:var(--panel);padding:26px 0;font-size:12.5px;color:var(--ink-70)}
+  footer code{font-family:var(--mono);font-size:11.5px}
+  a{color:inherit}
+
+  @media (max-width:640px){
+    .wrap{padding:0 16px}
+    .masthead{padding-top:28px}
+    .node{flex-basis:calc(50% - 1px);padding-right:12px}
+    .node:nth-child(odd)+.node{padding-left:12px}
+    .count{margin-left:0;width:100%}
+    #map{height:64vh}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="kicker">Coupang Logistics Network · Korea</p>
+    <h1>쿠팡 물류 네트워크 지도</h1>
+    <p class="lede">전국 쿠팡 물류시설의 위치와 목록입니다. 시설은 상품이 이동하는 순서에 따라 네 유형으로 나뉩니다. 지도의 표식을 누르면 주소와 상세 정보가 열립니다.</p>
+
+    <div class="spine" id="spine"></div>
+    <p class="flowline">배송 흐름 &nbsp;<b>풀필먼트 센터 · 서브FC</b> → <b>서브허브</b> → <b>캠프</b> → 고객<span style="margin-left:18px">기타 시설은 이 흐름 밖에 있습니다</span></p>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="wrap">
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab-map" role="tab" aria-selected="true" aria-controls="panel-map">지도</button>
+      <button class="tab" id="tab-table" role="tab" aria-selected="false" aria-controls="panel-table">표</button>
+    </div>
+    <div class="filters">
+      <div>
+        <label for="f-sido">시도</label>
+        <select id="f-sido"><option value="">전체</option></select>
+      </div>
+      <div>
+        <label for="f-q">검색</label>
+        <input type="search" id="f-q" placeholder="시설명 또는 주소">
+      </div>
+      <div style="flex:1 1 auto">
+        <label>유형</label>
+        <div class="chips" id="f-types"></div>
+      </div>
+      <div>
+        <label for="f-prec">좌표</label>
+        <select id="f-prec">
+          <option value="">전체</option>
+          <option value="읍면동">읍면동 정밀 이상</option>
+        </select>
+      </div>
+      <span class="count" id="count"></span>
+    </div>
+  </div>
+</div>
+
+<main class="wrap">
+  <section class="panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
+    <div class="banner">
+      <b>좌표는 아직 임시값입니다.</b> 지오코딩 API를 쓸 수 없어 주소의 행정구역 중심점으로 찍었습니다.
+      <span class="prec" data-p="읍면동">읍면동</span> 은 수백 m,
+      <span class="prec" data-p="시군구">시군구</span> 는 수 km 어긋날 수 있습니다.
+      실제 부지 좌표는 <code>geocode.py</code> 를 한 번 돌리면 채워집니다.
+    </div>
+    <div id="map"></div>
+    <p class="maphint">같은 좌표에 겹치는 시설은 작은 원을 그리며 흩어 놓았습니다. 확대하면 하나씩 구분됩니다. 표식을 누르면 상세 정보가 열립니다.</p>
+  </section>
+
+  <section class="panel" id="panel-table" role="tabpanel" aria-labelledby="tab-table" hidden>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th data-k="name">시설명</th>
+          <th data-k="type">유형</th>
+          <th data-k="region">권역</th>
+          <th data-k="sido">시도</th>
+          <th data-k="sigungu">시군구</th>
+          <th data-k="address">주소</th>
+          <th data-k="precision">좌표</th>
+          <th data-k="note">비고</th>
+          <th>지도</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="tableacts">
+      <button class="btn" id="dl">현재 목록 CSV로 내려받기</button>
+    </div>
+  </section>
+</main>
+
+<section class="notes wrap">
+  <h2>시설 유형</h2>
+  <p>표식은 색과 모양 두 가지로 유형을 구분합니다. 색 구분이 어려운 환경에서도 모양으로 읽을 수 있습니다.</p>
+  <dl class="deflist" id="legend"></dl>
+
+  <h2>자료에 대하여</h2>
+  <p id="meta"></p>
+  <p>누락된 시설이나 수정할 내용이 있으면 알려 주세요. 각 항목은 출처를 함께 기록하는 것을 원칙으로 합니다.</p>
+</section>
+
+<footer>
+  <div class="wrap">
+    배경지도 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> 기여자 ·
+    타일 <a href="https://carto.com/attributions" target="_blank" rel="noopener">© CARTO</a> ·
+    지도 라이브러리 <code>Leaflet</code> · 페이지 생성 <code id="built"></code><br>
+    시설 목록은 공개된 자료를 정리한 것이며 쿠팡과 무관합니다. 오류 제보를 환영합니다.
+  </div>
+</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===== 데이터 (build.py 가 CSV에서 주입) ===== */
+const DATA = /*__DATA__*/[];
+const META = /*__META__*/{built:"", note:""};
+
+/* ===== 유형 정의 ===== */
+const TYPES = [
+  {key:"풀필먼트센터", label:"풀필먼트 센터", color:"#c8102e", shape:"square", size:18,
+   role:"보관·집품·포장", desc:"상품을 대량으로 보관하고 주문에 맞춰 집품·포장하는 대형 거점. 네트워크의 출발점입니다."},
+  {key:"서브FC", label:"서브FC", color:"#7b2cbf", shape:"diamond", size:15,
+   role:"권역 소형 거점", desc:"본 센터가 닿기 어려운 권역에서 보관·집품을 맡는 소규모 거점입니다. 제주·도서 지역에 특히 많습니다."},
+  {key:"서브허브", label:"서브허브", color:"#e07a00", shape:"triangle", size:15,
+   role:"권역 분류·중계", desc:"여러 센터에서 온 물량을 권역별로 분류해 캠프로 넘기는 중계 시설입니다. Cluster Hub 도 여기에 포함됩니다."},
+  {key:"캠프", label:"캠프", color:"#0f8b8d", shape:"circle", size:11,
+   role:"최종 배송 출발", desc:"배송기사가 물량을 싣고 나가는 마지막 거점. 고객 주소지와 가장 가깝고 수가 가장 많습니다."},
+  {key:"기타", label:"기타 시설", color:"#5b6b7c", shape:"plus", size:13,
+   role:"통관·협력사", desc:"세관, 협력 물류사 등 위 네 유형에 속하지 않는 시설입니다."}
+];
+const T = Object.fromEntries(TYPES.map(t=>[t.key,t]));
+const typeOf = r => T[r.type] || T["기타"];
+
+/* ===== 표식 모양 ===== */
+function svgFor(shape,color,size){
+  const s=size, c=s/2, f=`fill="${color}" stroke="#ffffff" stroke-width="1.6"`;
+  if(shape==="square")   return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><rect x="1.5" y="1.5" width="${s-3}" height="${s-3}" ${f}/></svg>`;
+  if(shape==="diamond")  return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c},1.5 ${s-1.5},${c} ${c},${s-1.5} 1.5,${c}" ${f}/></svg>`;
+  if(shape==="triangle") return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c},2 ${s-2},${s-3} 2,${s-3}" ${f}/></svg>`;
+  if(shape==="plus"){const t=s*0.34;return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c-t/2},2 ${c+t/2},2 ${c+t/2},${c-t/2} ${s-2},${c-t/2} ${s-2},${c+t/2} ${c+t/2},${c+t/2} ${c+t/2},${s-2} ${c-t/2},${s-2} ${c-t/2},${c+t/2} 2,${c+t/2} 2,${c-t/2} ${c-t/2},${c-t/2}" ${f}/></svg>`;}
+  return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><circle cx="${c}" cy="${c}" r="${c-2}" ${f}/></svg>`;
+}
+const sizeOf = t => t.size || 13;
+
+/* ===== 헤더 카운트 ===== */
+const spine=document.getElementById("spine");
+TYPES.forEach(t=>{
+  const n=DATA.filter(r=>r.type===t.key).length;
+  spine.insertAdjacentHTML("beforeend",
+    `<div class="node"><span class="tick" style="background:${t.color}"></span>
+     <span class="n">${n}</span><span class="lbl">${t.label}</span>
+     <span class="role">${t.role}</span></div>`);
+});
+
+/* ===== 범례 ===== */
+document.getElementById("legend").innerHTML = TYPES.map(t=>
+  `<div><dt>${svgFor(t.shape,t.color,13)} ${t.label}</dt><dd>${t.desc}</dd></div>`
+).join("");
+document.querySelectorAll("#legend dt svg").forEach(s=>{s.style.verticalAlign="-1px";s.style.display="inline-block";s.style.marginRight="2px"});
+
+/* ===== 필터 UI ===== */
+const chips=document.getElementById("f-types");
+TYPES.forEach(t=>{
+  chips.insertAdjacentHTML("beforeend",
+    `<label class="chip" data-on="1" data-key="${t.key}">
+      <input type="checkbox" checked value="${t.key}">
+      <span class="sw" style="background:${t.color}"></span>${t.label}</label>`);
+});
+const selSido=document.getElementById("f-sido");
+[...new Set(DATA.map(r=>r.sido).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ko"))
+  .forEach(s=>selSido.insertAdjacentHTML("beforeend",`<option>${s}</option>`));
+
+/* ===== 지도 ===== */
+const map=L.map("map",{scrollWheelZoom:false}).setView([36.4,127.9],7);
+map.on("click",()=>map.scrollWheelZoom.enable());
+L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{
+  attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19, subdomains:"abcd"
+}).addTo(map);
+const layer=L.layerGroup().addTo(map);
+const markers=new Map();
+
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function popupHTML(r){
+  const t=typeOf(r);
+  const row=(k,v)=>v?`<div class="pop-row"><b>${k}</b> ${esc(v)}</div>`:"";
+  const q=encodeURIComponent(r.address||r.name);
+  const stack = r._stack>1 ? `<div class="pop-row" style="color:#8b95a3">같은 좌표에 ${r._stack}개 시설이 있어 겹치지 않게 흩어 놓았습니다</div>` : "";
+  return `<div class="pop-type" style="color:${t.color}">${t.label}</div>
+    <div class="pop-name">${esc(r.name)}</div>
+    ${row("주소",r.address||"원본에 주소 없음")}${row("권역",r.region)}${row("비고",r.note)}
+    <div class="pop-row"><b>좌표</b> <span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)} 중심점</span></div>
+    ${stack}
+    <div class="pop-links">
+      <a href="https://map.kakao.com/?q=${q}" target="_blank" rel="noopener">카카오맵</a>
+      <a href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">구글지도</a>
+      ${r.source_url?`<a href="${esc(r.source_url)}" target="_blank" rel="noopener">출처</a>`:""}
+    </div>`;
+}
+
+/* 같은 건물·같은 좌표에 있는 시설들을 각각 보이게 원형으로 흩뿌립니다.
+   원래 좌표는 r.lat/r.lng 로 남기고, 지도 표시용 좌표만 r._lat/r._lng 로 옮깁니다. */
+const stacks=new Map();
+DATA.forEach((r,i)=>{
+  if(r.lat==null||r.lng==null) return;
+  const k=r.lat.toFixed(5)+","+r.lng.toFixed(5);
+  if(!stacks.has(k)) stacks.set(k,[]);
+  stacks.get(k).push(i);
+});
+DATA.forEach(r=>{ r._lat=r.lat; r._lng=r.lng; r._stack=1; });
+stacks.forEach(idxs=>{
+  const n=idxs.length;
+  idxs.forEach(i=>DATA[i]._stack=n);
+  if(n<2) return;
+  const per=8, cosLat=Math.cos(DATA[idxs[0]].lat*Math.PI/180)||1;
+  idxs.forEach((i,j)=>{
+    const ring=Math.floor(j/per), slot=j%per;
+    const cnt=Math.min(per,n-ring*per);
+    const R=0.00075*(ring+1);
+    const ang=2*Math.PI*slot/cnt + ring*0.4;
+    DATA[i]._lat=DATA[i].lat+R*Math.cos(ang);
+    DATA[i]._lng=DATA[i].lng+R*Math.sin(ang)/cosLat;
+  });
+});
+
+DATA.forEach((r,i)=>{
+  if(r.lat==null||r.lng==null) return;
+  const t=typeOf(r), s=sizeOf(t);
+  const m=L.marker([r._lat,r._lng],{
+    icon:L.divIcon({className:"mk"+(r.precision==="시군구"?" approx":""),html:svgFor(t.shape,t.color,s),iconSize:[s,s],iconAnchor:[s/2,s/2]}),
+    title:r.name, zIndexOffset:{"풀필먼트센터":900,"서브FC":700,"서브허브":500,"기타":300,"캠프":100}[t.key]||0
+  }).bindPopup(popupHTML(r),{maxWidth:320});
+  markers.set(i,m);
+});
+
+/* ===== 필터 적용 ===== */
+let sortKey="name", sortDir=1;
+function activeTypes(){
+  return new Set([...chips.querySelectorAll("input")].filter(i=>i.checked).map(i=>i.value));
+}
+function filtered(){
+  const types=activeTypes(), sido=selSido.value.trim();
+  const prec=document.getElementById("f-prec").value;
+  const q=document.getElementById("f-q").value.trim().toLowerCase();
+  return DATA.map((r,i)=>({r,i})).filter(({r})=>
+    types.has(T[r.type]?r.type:"기타") &&
+    (!sido||r.sido===sido) &&
+    (!prec||r.precision===prec) &&
+    (!q||`${r.name} ${r.address} ${r.sigungu} ${r.region} ${r.note}`.toLowerCase().includes(q))
+  );
+}
+function render(){
+  const rows=filtered();
+  layer.clearLayers();
+  let shown=0;
+  rows.forEach(({i})=>{ const m=markers.get(i); if(m){layer.addLayer(m);shown++;} });
+
+  document.getElementById("count").textContent =
+    `${rows.length}개 표시 · 지도 표시 ${shown}개 / 전체 ${DATA.length}개`;
+
+  const sorted=[...rows].sort((a,b)=>{
+    const x=a.r[sortKey]??"", y=b.r[sortKey]??"";
+    return String(x).localeCompare(String(y),"ko",{numeric:true})*sortDir;
+  });
+  const tb=document.getElementById("tbody");
+  if(!sorted.length){ tb.innerHTML=`<tr><td colspan="9" class="empty">조건에 맞는 시설이 없습니다. 필터를 넓혀 보세요.</td></tr>`; return; }
+  tb.innerHTML=sorted.map(({r,i})=>{
+    const t=typeOf(r);
+    return `<tr>
+      <td class="nm">${esc(r.name)}</td>
+      <td><span class="tag" style="color:${t.color}"><span class="sw" style="background:${t.color}"></span>${t.label}</span></td>
+      <td>${esc(r.region)}</td>
+      <td>${esc(r.sido)}</td><td>${esc(r.sigungu)}</td>
+      <td class="addr">${esc(r.address)}</td>
+      <td><span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)}</span></td>
+      <td class="addr">${esc(r.note)}</td>
+      <td>${markers.has(i)?`<button class="pin" data-i="${i}">보기</button>`:'<span style="color:var(--ink-40)">좌표 없음</span>'}</td>
+    </tr>`;
+  }).join("");
+}
+
+document.getElementById("tbody").addEventListener("click",e=>{
+  const b=e.target.closest(".pin"); if(!b) return;
+  showTab("map");
+  const m=markers.get(+b.dataset.i);
+  map.setView(m.getLatLng(),12,{animate:false}); m.openPopup();
+});
+chips.addEventListener("change",e=>{
+  e.target.closest(".chip").dataset.on = e.target.checked?"1":"0";
+  render();
+});
+selSido.addEventListener("change",render);
+document.getElementById("f-prec").addEventListener("change",render);
+document.getElementById("f-q").addEventListener("input",render);
+document.querySelectorAll("thead th[data-k]").forEach(th=>{
+  th.addEventListener("click",()=>{
+    const k=th.dataset.k;
+    sortDir = (k===sortKey) ? -sortDir : 1;
+    sortKey = k;
+    document.querySelectorAll("thead th").forEach(o=>o.removeAttribute("aria-sort"));
+    th.setAttribute("aria-sort",sortDir===1?"ascending":"descending");
+    render();
+  });
+});
+
+/* ===== 탭 ===== */
+function showTab(which){
+  const m = which==="map";
+  document.getElementById("tab-map").setAttribute("aria-selected",m);
+  document.getElementById("tab-table").setAttribute("aria-selected",!m);
+  document.getElementById("panel-map").hidden=!m;
+  document.getElementById("panel-table").hidden=m;
+  if(m) setTimeout(()=>map.invalidateSize(),0);
+}
+document.getElementById("tab-map").onclick=()=>showTab("map");
+document.getElementById("tab-table").onclick=()=>showTab("table");
+
+/* ===== CSV 내려받기 ===== */
+document.getElementById("dl").onclick=()=>{
+  const cols=["name","type","region","address","sido","sigungu","lat","lng","precision","note","source_url"];
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const csv="\uFEFF"+[cols.join(",")].concat(filtered().map(({r})=>cols.map(c=>q(r[c])).join(","))).join("\n");
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+  a.download="coupang_facilities_filtered.csv"; a.click();
+};
+
+/* ===== 메타 ===== */
+document.getElementById("built").textContent=META.built;
+document.getElementById("meta").textContent=META.note;
+
+render();
+</script>
+</body>
+</html>
