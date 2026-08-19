@@ -117,7 +117,15 @@
   .prec[data-p="읍면동"]{border-color:#b9c6b3;background:#f2f7f0}
   .prec[data-p="시군구"]{border-color:#e4cfa0;background:#fdf8ec}
   .prec[data-p="주소없음"]{border-color:#e3b5b8;background:#fdf3f4}
-  .mk.approx svg{opacity:.72}
+  .prec[data-p="축약주소"],.prec[data-p="키워드"]{border-color:#e3b5b8;background:#fdf3f4;color:#a3383f}
+  .mk.approx svg{opacity:.75}
+  /* 핀은 사각형 아이콘 안에 그려지는데, 그대로 두면 투명한 모서리까지 클릭을 가로채
+     뒤에 깔린 핀을 누를 수 없습니다. 실제로 색이 칠해진 부분만 클릭되게 합니다. */
+  .mk{cursor:pointer;pointer-events:none}
+  .mk svg{pointer-events:none}
+  .mk svg path,.mk svg rect,.mk svg circle,.mk svg polygon{pointer-events:auto}
+  .mk svg{transition:transform .08s ease-out;transform-origin:50% 100%}
+  .mk:hover svg{transform:scale(1.14)}
 
   /* markers */
   .mk{display:block}
@@ -223,7 +231,8 @@
         <label for="f-prec">좌표</label>
         <select id="f-prec">
           <option value="">전체</option>
-          <option value="읍면동">읍면동 정밀 이상</option>
+          <option value="__exact">정확한 좌표만</option>
+          <option value="__check">확인 필요만</option>
         </select>
       </div>
       <span class="count" id="count"></span>
@@ -233,14 +242,9 @@
 
 <main class="wrap">
   <section class="panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
-    <div class="banner">
-      <b>좌표는 아직 임시값입니다.</b> 지오코딩 API를 쓸 수 없어 주소의 행정구역 중심점으로 찍었습니다.
-      <span class="prec" data-p="읍면동">읍면동</span> 은 수백 m,
-      <span class="prec" data-p="시군구">시군구</span> 는 수 km 어긋날 수 있습니다.
-      실제 부지 좌표는 <code>geocode.py</code> 를 한 번 돌리면 채워집니다.
-    </div>
+    <div class="banner" id="banner"></div>
     <div id="map"></div>
-    <p class="maphint">같은 좌표에 겹치는 시설은 작은 원을 그리며 흩어 놓았습니다. 확대하면 하나씩 구분됩니다. 표식을 누르면 상세 정보가 열립니다.</p>
+    <p class="maphint">핀 끝이 실제 위치를 가리킵니다. 같은 좌표에 여러 시설이 있으면 조금씩 어긋나게 겹쳐 꽂았으니, 핀 하나하나를 눌러 보세요. 마우스를 올리면 그 핀이 맨 앞으로 올라옵니다.</p>
   </section>
 
   <section class="panel" id="panel-table" role="tabpanel" aria-labelledby="tab-table" hidden>
@@ -307,16 +311,36 @@ const TYPES = [
 const T = Object.fromEntries(TYPES.map(t=>[t.key,t]));
 const typeOf = r => T[r.type] || T["기타"];
 
-/* ===== 표식 모양 ===== */
-function svgFor(shape,color,size){
-  const s=size, c=s/2, f=`fill="${color}" stroke="#ffffff" stroke-width="1.6"`;
-  if(shape==="square")   return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><rect x="1.5" y="1.5" width="${s-3}" height="${s-3}" ${f}/></svg>`;
-  if(shape==="diamond")  return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c},1.5 ${s-1.5},${c} ${c},${s-1.5} 1.5,${c}" ${f}/></svg>`;
-  if(shape==="triangle") return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c},2 ${s-2},${s-3} 2,${s-3}" ${f}/></svg>`;
-  if(shape==="plus"){const t=s*0.34;return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><polygon points="${c-t/2},2 ${c+t/2},2 ${c+t/2},${c-t/2} ${s-2},${c-t/2} ${s-2},${c+t/2} ${c+t/2},${c+t/2} ${c+t/2},${s-2} ${c-t/2},${s-2} ${c-t/2},${c+t/2} 2,${c+t/2} 2,${c-t/2} ${c-t/2},${c-t/2}" ${f}/></svg>`;}
-  return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><circle cx="${c}" cy="${c}" r="${c-2}" ${f}/></svg>`;
+/* ===== 표식: 핀 모양 =====
+   핀 머리 안에 유형별 기호를 넣어 색이 구분되지 않는 환경에서도 읽히게 합니다. */
+function glyph(shape,cx,cy,r){
+  const f='fill="#ffffff"';
+  if(shape==="square")   return `<rect x="${cx-r}" y="${cy-r}" width="${r*2}" height="${r*2}" ${f}/>`;
+  if(shape==="diamond")  return `<polygon points="${cx},${cy-r*1.25} ${cx+r*1.25},${cy} ${cx},${cy+r*1.25} ${cx-r*1.25},${cy}" ${f}/>`;
+  if(shape==="triangle") return `<polygon points="${cx},${cy-r*1.2} ${cx+r*1.2},${cy+r*0.9} ${cx-r*1.2},${cy+r*0.9}" ${f}/>`;
+  if(shape==="plus"){const a=r*0.42,b=r*1.25;
+    return `<polygon points="${cx-a},${cy-b} ${cx+a},${cy-b} ${cx+a},${cy-a} ${cx+b},${cy-a} ${cx+b},${cy+a} ${cx+a},${cy+a} ${cx+a},${cy+b} ${cx-a},${cy+b} ${cx-a},${cy+a} ${cx-b},${cy+a} ${cx-b},${cy-a} ${cx-a},${cy-a}" ${f}/>`;}
+  return `<circle cx="${cx}" cy="${cy}" r="${r*1.1}" ${f}/>`;
 }
-const sizeOf = t => t.size || 13;
+/* 24x33 기준 도형을 w 에 맞춰 늘립니다. 뾰족한 끝이 실제 좌표를 가리킵니다. */
+function pinSVG(t,w){
+  const h=Math.round(w*33/24);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 24 33">`
+    + `<path d="M12 32.2C12 32.2 23 19.4 23 11.6 23 5.6 18.1 0.8 12 0.8S1 5.6 1 11.6c0 7.8 11 20.6 11 20.6z" `
+    + `fill="${t.color}" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round"/>`
+    + glyph(t.shape,12,11.6,3.5) + `</svg>`;
+}
+/* 핀 크기(px). 다섯 유형 모두 같은 크기입니다.
+   유형별로 다르게 하고 싶으면 PIN_W 에 {"캠프":22} 처럼 예외만 적으면 됩니다. */
+const PIN_SIZE = 27;
+const PIN_W = {};
+const pinW = t => PIN_W[t.key] || PIN_SIZE;
+
+/* 범례·본문용 작은 기호 */
+function chipSVG(t,s){
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24">`
+    + `<circle cx="12" cy="12" r="11" fill="${t.color}"/>` + glyph(t.shape,12,12,4.5) + `</svg>`;
+}
 
 /* ===== 헤더 카운트 ===== */
 const spine=document.getElementById("spine");
@@ -330,7 +354,7 @@ TYPES.forEach(t=>{
 
 /* ===== 범례 ===== */
 document.getElementById("legend").innerHTML = TYPES.map(t=>
-  `<div><dt>${svgFor(t.shape,t.color,13)} ${t.label}</dt><dd>${t.desc}</dd></div>`
+  `<div><dt>${chipSVG(t,14)} ${t.label}</dt><dd>${t.desc}</dd></div>`
 ).join("");
 document.querySelectorAll("#legend dt svg").forEach(s=>{s.style.verticalAlign="-1px";s.style.display="inline-block";s.style.marginRight="2px"});
 
@@ -361,11 +385,13 @@ function popupHTML(r){
   const t=typeOf(r);
   const row=(k,v)=>v?`<div class="pop-row"><b>${k}</b> ${esc(v)}</div>`:"";
   const q=encodeURIComponent(r.address||r.name);
-  const stack = r._stack>1 ? `<div class="pop-row" style="color:#8b95a3">같은 좌표에 ${r._stack}개 시설이 있어 겹치지 않게 흩어 놓았습니다</div>` : "";
+  const stack = r._stack>1 ? `<div class="pop-row" style="color:#8b95a3">같은 좌표에 ${r._stack}개 시설이 겹쳐 있습니다. 옆의 핀도 각각 눌러 보세요</div>` : "";
   return `<div class="pop-type" style="color:${t.color}">${t.label}</div>
     <div class="pop-name">${esc(r.name)}</div>
     ${row("주소",r.address||"원본에 주소 없음")}${row("권역",r.region)}${row("비고",r.note)}
-    <div class="pop-row"><b>좌표</b> <span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)} 중심점</span></div>
+    ${r.precision ? `<div class="pop-row"><b>좌표</b> <span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)}</span>
+        <span style="color:#a3383f">확인이 필요합니다</span>${r.matched?`<br><span style="color:#8b95a3">실제로 찍힌 곳: ${esc(r.matched)}</span>`:""}</div>`
+      : `<div class="pop-row"><b>좌표</b> 주소와 일치</div>`}
     ${stack}
     <div class="pop-links">
       <a href="https://map.kakao.com/?q=${q}" target="_blank" rel="noopener">카카오맵</a>
@@ -374,8 +400,12 @@ function popupHTML(r){
     </div>`;
 }
 
-/* 같은 건물·같은 좌표에 있는 시설들을 각각 보이게 원형으로 흩뿌립니다.
-   원래 좌표는 r.lat/r.lng 로 남기고, 지도 표시용 좌표만 r._lat/r._lng 로 옮깁니다. */
+/* 같은 좌표에 있는 시설들은 좌표를 그대로 둔 채 화면상 위치만 픽셀 단위로 밀어
+   카드 부채처럼 겹쳐 꽂습니다. 픽셀 기준이라 확대·축소해도 겹침 정도가 일정합니다. */
+const FAN_X = 11;   // 옆으로 밀어내는 간격(px). 좁을수록 많이 겹칩니다
+const FAN_Y = 23;   // 한 줄에 다 못 담으면 위로 올리는 간격(px)
+const FAN_PER_ROW = 6;
+
 const stacks=new Map();
 DATA.forEach((r,i)=>{
   if(r.lat==null||r.lng==null) return;
@@ -383,28 +413,39 @@ DATA.forEach((r,i)=>{
   if(!stacks.has(k)) stacks.set(k,[]);
   stacks.get(k).push(i);
 });
-DATA.forEach(r=>{ r._lat=r.lat; r._lng=r.lng; r._stack=1; });
+DATA.forEach(r=>{ r._dx=0; r._dy=0; r._stack=1; r._order=0; });
 stacks.forEach(idxs=>{
   const n=idxs.length;
   idxs.forEach(i=>DATA[i]._stack=n);
   if(n<2) return;
-  const per=8, cosLat=Math.cos(DATA[idxs[0]].lat*Math.PI/180)||1;
+  // 겹치는 순서를 유형 → 이름 순으로 고정합니다. 새로고침해도 배치가 바뀌지 않습니다.
+  const rank={"풀필먼트센터":0,"서브FC":1,"서브허브":2,"기타":3,"캠프":4};
+  idxs.sort((a,b)=>(rank[DATA[a].type]??9)-(rank[DATA[b].type]??9)
+                 || DATA[a].name.localeCompare(DATA[b].name,"ko"));
+  const rows=Math.ceil(n/FAN_PER_ROW);
   idxs.forEach((i,j)=>{
-    const ring=Math.floor(j/per), slot=j%per;
-    const cnt=Math.min(per,n-ring*per);
-    const R=0.00075*(ring+1);
-    const ang=2*Math.PI*slot/cnt + ring*0.4;
-    DATA[i]._lat=DATA[i].lat+R*Math.cos(ang);
-    DATA[i]._lng=DATA[i].lng+R*Math.sin(ang)/cosLat;
+    const row=Math.floor(j/FAN_PER_ROW), col=j%FAN_PER_ROW;
+    const cnt=Math.min(FAN_PER_ROW,n-row*FAN_PER_ROW);
+    DATA[i]._dx=(col-(cnt-1)/2)*FAN_X;
+    DATA[i]._dy=-row*FAN_Y;
+    /* 아래쪽 줄이 앞으로 오게 합니다. 위쪽 줄이 앞이면 아랫줄 핀 머리를 통째로 가립니다. */
+    DATA[i]._order=(rows-1-row)*FAN_PER_ROW + col;
   });
 });
 
 DATA.forEach((r,i)=>{
   if(r.lat==null||r.lng==null) return;
-  const t=typeOf(r), s=sizeOf(t);
-  const m=L.marker([r._lat,r._lng],{
-    icon:L.divIcon({className:"mk"+(r.precision==="시군구"?" approx":""),html:svgFor(t.shape,t.color,s),iconSize:[s,s],iconAnchor:[s/2,s/2]}),
-    title:r.name, zIndexOffset:{"풀필먼트센터":900,"서브FC":700,"서브허브":500,"기타":300,"캠프":100}[t.key]||0
+  const t=typeOf(r), w=pinW(t), h=Math.round(w*33/24);
+  const base=200+r._order*10;      // 부채의 뒤쪽부터 차곡차곡 쌓입니다
+  const m=L.marker([r.lat,r.lng],{
+    icon:L.divIcon({
+      className:"mk"+(r.precision==="시군구"?" approx":""),
+      html:pinSVG(t,w), iconSize:[w,h],
+      /* 핀 끝이 좌표를 가리키게 하고, 겹침만큼 밀어 줍니다 */
+      iconAnchor:[w/2 - r._dx, h - r._dy],
+      popupAnchor:[r._dx, r._dy - h + 4]
+    }),
+    title:r.name, riseOnHover:true, riseOffset:3000, zIndexOffset:base
   }).bindPopup(popupHTML(r),{maxWidth:320});
   markers.set(i,m);
 });
@@ -421,7 +462,10 @@ function filtered(){
   return DATA.map((r,i)=>({r,i})).filter(({r})=>
     types.has(T[r.type]?r.type:"기타") &&
     (!sido||r.sido===sido) &&
-    (!prec||r.precision===prec) &&
+    (!prec
+      || (prec==="__exact" && !r.precision)
+      || (prec==="__check" && !!r.precision)
+      || r.precision===prec) &&
     (!q||`${r.name} ${r.address} ${r.sigungu} ${r.region} ${r.note}`.toLowerCase().includes(q))
   );
 }
@@ -448,7 +492,7 @@ function render(){
       <td>${esc(r.region)}</td>
       <td>${esc(r.sido)}</td><td>${esc(r.sigungu)}</td>
       <td class="addr">${esc(r.address)}</td>
-      <td><span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)}</span></td>
+      <td>${r.precision?`<span class="prec" data-p="${esc(r.precision)}">${esc(r.precision)}</span>`:'<span style="color:var(--ink-40)">정확</span>'}</td>
       <td class="addr">${esc(r.note)}</td>
       <td>${markers.has(i)?`<button class="pin" data-i="${i}">보기</button>`:'<span style="color:var(--ink-40)">좌표 없음</span>'}</td>
     </tr>`;
@@ -500,6 +544,16 @@ document.getElementById("dl").onclick=()=>{
   a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
   a.download="coupang_facilities_filtered.csv"; a.click();
 };
+
+/* ===== 좌표 신뢰도 배너 ===== */
+(function(){
+  const bad=DATA.filter(r=>r.precision).length;
+  const el=document.getElementById("banner");
+  if(!bad){ el.hidden=true; return; }
+  el.innerHTML = `<b>좌표 ${bad}개는 확인이 필요합니다.</b> 주소를 그대로 찾지 못해 축약하거나 `
+    + `시설명으로 검색한 것이라 실제 위치와 다를 수 있습니다. 위 <b>좌표</b> 칸에서 `
+    + `<b>확인 필요만</b> 을 골라 하나씩 살펴보세요. 나머지 ${DATA.length-bad}개는 주소와 일치합니다.`;
+})();
 
 /* ===== 메타 ===== */
 document.getElementById("built").textContent=META.built;
