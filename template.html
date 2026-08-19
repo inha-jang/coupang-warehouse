@@ -242,7 +242,8 @@
 
 <main class="wrap">
   <section class="panel" id="panel-map" role="tabpanel" aria-labelledby="tab-map">
-    <div class="banner" id="banner"></div>
+    <!-- 좌표 안내 배너를 숨겨 둔 상태입니다. hidden 을 지우면 다시 나타납니다. -->
+    <div class="banner" id="banner" hidden></div>
     <div id="map"></div>
     <p class="maphint">핀 끝이 실제 위치를 가리킵니다. 같은 좌표에 여러 시설이 있으면 조금씩 어긋나게 겹쳐 꽂았으니, 핀 하나하나를 눌러 보세요. 마우스를 올리면 그 핀이 맨 앞으로 올라옵니다.</p>
   </section>
@@ -545,14 +546,25 @@ document.getElementById("dl").onclick=()=>{
   a.download="coupang_facilities_filtered.csv"; a.click();
 };
 
-/* ===== 좌표 신뢰도 배너 ===== */
+/* ===== 좌표 신뢰도 배너 =====
+   상황에 맞는 문구만 골라 보여 줍니다. 문제가 없으면 배너 자체가 사라집니다. */
 (function(){
-  const bad=DATA.filter(r=>r.precision).length;
   const el=document.getElementById("banner");
-  if(!bad){ el.hidden=true; return; }
-  el.innerHTML = `<b>좌표 ${bad}개는 확인이 필요합니다.</b> 주소를 그대로 찾지 못해 축약하거나 `
-    + `시설명으로 검색한 것이라 실제 위치와 다를 수 있습니다. 위 <b>좌표</b> 칸에서 `
-    + `<b>확인 필요만</b> 을 골라 하나씩 살펴보세요. 나머지 ${DATA.length-bad}개는 주소와 일치합니다.`;
+  const check = DATA.filter(r=>["축약주소","키워드"].includes(r.precision)).length;
+  const rough = DATA.filter(r=>["읍면동","시군구"].includes(r.precision)).length;
+  const none  = DATA.filter(r=>["주소없음","실패"].includes(r.precision)).length;
+  const ok    = DATA.length - check - rough - none;
+  const parts=[];
+
+  if(check) parts.push(`<b>좌표 ${check}개는 확인이 필요합니다.</b> 주소를 그대로 찾지 못해 `
+    + `축약하거나 시설명으로 검색한 것이라 실제 위치와 다를 수 있습니다. `
+    + `위 <b>좌표</b> 칸에서 <b>확인 필요만</b> 을 골라 하나씩 살펴보세요.`);
+  if(rough) parts.push(`<b>${rough}개는 행정구역 중심점</b> 에 찍힌 임시 좌표라 실제 부지와 차이가 큽니다.`);
+  if(none)  parts.push(`<b>${none}개는 주소를 확인하지 못해</b> 지도에서 빠져 있습니다. 표에서는 볼 수 있습니다.`);
+
+  if(!parts.length){ el.hidden=true; return; }
+  parts.push(`나머지 ${ok}개는 주소와 일치합니다.`);
+  el.innerHTML = parts.join(" ");
 })();
 
 /* ===== 메타 ===== */
