@@ -36,42 +36,64 @@ def call(endpoint, **params):
 
 FLOOR = re.compile(r"^(지하\s*)?[BbGg]?\d+([-~]\d+)?\s*(층|[Ff])$")
 UNIT  = re.compile(r"^([A-Za-z]|제?\d+)\s*(동|호|블럭|블록|게이트|코어|도크|Dock|dock)$")
+# 주소의 마지막 조각: 지번(163-2, 산35-6) 또는 도로명 건물번호(80)
+BUNJI = re.compile(r"^(산\s?)?\d+([-–]\d+)?$")
 
 
 def clean(address):
-    """층·호수·건물 안내 같은 꼬리를 떼어 주소만 남깁니다.
-    괄호 안 설명과 쉼표 뒤 내용은 카카오 주소 검색이 못 읽는 경우가 많습니다."""
-    a = re.sub(r"\([^)]*\)", " ", address)      # 괄호 설명 제거
-    a = a.split(",")[0]                          # 쉼표 뒤 층·동 정보 제거
+    """주소 뒤에 붙은 층·호수·건물명·안내문을 떼어 순수 주소만 남깁니다."""
+    a = re.sub(r"\([^)]*\)", " ", address)          # 괄호 설명
+    a = re.split(r"외\s*\d+\s*필지", a)[0]           # '외 4필지 …'
+    a = a.split(",")[0]                              # 쉼표 뒤 층·동 정보
+    # '오목리산22-1' → '오목리 산22-1' (리·동에 산번지가 붙어 쓰인 경우)
+    a = re.sub(r"([가-힣]{2,}[리동])산\s*(\d)", r"\1 산\2", a)
+    a = re.sub(r"([가-힣]{2,}[리동])\s+산\s+(\d)", r"\1 산\2", a)
     toks = a.split()
-    while toks and (FLOOR.match(toks[-1]) or UNIT.match(toks[-1])):
-        toks.pop()
+    # 마지막 번지 뒤에 오는 건물 안내는 모두 잘라냅니다
+    last = max((i for i, t in enumerate(toks) if BUNJI.match(t)), default=-1)
+    if last >= 0:
+        toks = toks[:last + 1]
+    else:
+        while toks and (FLOOR.match(toks[-1]) or UNIT.match(toks[-1])):
+            toks.pop()
     return " ".join(toks).strip()
+
+
+def specific(matched):
+    """카카오가 돌려준 주소가 번지까지 내려갔는지 확인합니다."""
+    return bool(matched) and bool(BUNJI.match(matched.split()[-1]))
 
 
 def lookup(name, address):
     """되돌려주는 세 번째 값이 '어떻게 찾았는지' 입니다.
-    이 값에 따라 precision 열이 달라지고, 페이지에서 검증 대상으로 표시됩니다."""
-    if address:
-        cleaned = clean(address)
-        # 1) 층·호수만 떼고 주소 그대로 조회 — 이것만 정확한 좌표로 인정합니다
-        for q in ([address, cleaned] if cleaned != address else [address]):
-            docs = call("search/address.json", query=q, size=1)
-            if docs:
-                d = docs[0]
-                return float(d["y"]), float(d["x"]), "", d.get("address_name", "")
-        # 2) 뒤에서부터 한 토큰씩 잘라 가며 재시도 — 넓은 지역으로 밀릴 수 있습니다
-        toks = cleaned.split()
-        for n in range(len(toks) - 1, 2, -1):
-            docs = call("search/address.json", query=" ".join(toks[:n]), size=1)
-            if docs:
-                d = docs[0]
-                return float(d["y"]), float(d["x"]), "축약주소", d.get("address_name", "")
-    # 3) 시설명으로 장소 검색 — 엉뚱한 곳이 잡힐 수 있습니다
-    docs = call("search/keyword.json", query=f"{name} {clean(address)}".strip(), size=1)
-    if docs:
-        d = docs[0]
-        return float(d["y"]), float(d["x"]), "키워드", d.get("road_address_name") or d.get("address_name", "")
+    빈 값이면 주소가 그대로 맞은 것이고, 값이 있으면 확인이 필요합니다."""
+    cleaned = clean(address) if address else ""
+
+    # 1) 주소 그대로 조회. 번지까지 맞았을 때만 정확으로 인정합니다.
+    for q in [x for x in (address, cleaned) if x]:
+        docs = call("search/address.json", query=q, size=1)
+        if docs:
+            m = docs[0].get("address_name", "")
+            if specific(m):
+                return float(docs[0]["y"]), float(docs[0]["x"]), "", m
+
+    # 2) 시설명으로 장소 검색. 산번지처럼 주소 DB에 없는 필지를 여기서 건집니다.
+    for q in [f"쿠팡 {name}", f"{name} {cleaned}".strip()]:
+        docs = call("search/keyword.json", query=q, size=1)
+        if docs:
+            d = docs[0]
+            m = d.get("road_address_name") or d.get("address_name", "")
+            if specific(m):
+                return float(d["y"]), float(d["x"]), "키워드", m
+
+    # 3) 주소를 뒤에서부터 잘라 가며 조회. 동·읍면 중심점으로 밀립니다.
+    toks = cleaned.split()
+    for n in range(len(toks), 2, -1):
+        docs = call("search/address.json", query=" ".join(toks[:n]), size=1)
+        if docs:
+            d = docs[0]
+            return float(d["y"]), float(d["x"]), "축약주소", d.get("address_name", "")
+
     return None, None, None, None
 
 
