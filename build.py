@@ -90,7 +90,7 @@ with SRC.open(encoding="utf-8-sig", newline="") as f:
         rows.append({
             "name": r["name"], "type": t, "address": r.get("address", ""),
             "region": r.get("region", ""), "sido": sido, "sigungu": sigungu,
-            "lat": lat, "lng": lng, "precision": r.get("precision", ""),
+            "lat": lat, "lng": lng, "precision": r.get("precision", ""), "matched": r.get("matched", ""),
             "note": r.get("note", ""), "source_url": r.get("source_url", ""),
         })
 
